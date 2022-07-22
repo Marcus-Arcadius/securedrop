@@ -211,17 +211,20 @@ class SiteConfig:
             return translations
 
     class ValidateLocales(Validator):
-        def __init__(self, basedir: str) -> None:
+        def __init__(self, basedir: str, supported: list) -> None:
             self.basedir = basedir
+            self.supported = supported
             super(SiteConfig.ValidateLocales, self).__init__()
 
         def validate(self, document: Document) -> bool:
             desired = document.text.split()
             existing = SiteConfig.Locales(self.basedir).get_translations()
-            missing = set(desired) - set(existing)
+            missing = set(desired) - (set(existing) & set(self.supported))
             if not missing:
                 return True
-            raise ValidationError(message="The following locales do not exist " + " ".join(missing))
+            raise ValidationError(
+                message="The following locales are not supported " + " ".join(missing)
+            )
 
     class ValidateOSSECUsername(Validator):
         def validate(self, document: Document) -> bool:
@@ -268,8 +271,11 @@ class SiteConfig:
         # Hold runtime configuration before save, to support
         # referencing other responses during validation
         self._config_in_progress = {}  # type: Dict
-        translations = SiteConfig.Locales(self.args.app_path).get_translations()
-        translations_as_str = " ".join(translations)
+
+        with open(os.path.join(args.root, "securedrop/i18n.json")) as i18n_conf:
+            i18n = json.load(i18n_conf)
+        supported_locales = i18n["supported_locales"].keys()
+        supported_locales_as_str = " ".join(supported_locales)
 
         self.desc = [
             (
@@ -503,8 +509,8 @@ class SiteConfig:
                 [],
                 list,
                 "Space separated list of additional locales to support "
-                "(" + translations_as_str + ")",
-                SiteConfig.ValidateLocales(self.args.app_path),
+                "(" + supported_locales_as_str + ")",
+                SiteConfig.ValidateLocales(self.args.app_path, supported_locales),
                 str.split,
                 lambda config: True,
             ),
